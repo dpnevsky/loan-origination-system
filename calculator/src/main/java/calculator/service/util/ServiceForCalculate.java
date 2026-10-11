@@ -1,8 +1,10 @@
 package calculator.service.util;
 
 import lombok.extern.slf4j.Slf4j;
+import core.dto.PaymentScheduleElementDto;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.stream.IntStream;
 import static calculator.service.util.Constant.INSURANCE_PRICE_IN_PERCENT;
 import static calculator.service.util.Constant.MAX_INSURANCE_PRICE;
@@ -66,13 +68,14 @@ public class ServiceForCalculate {
      * равной трёмстам шестидесяти пяти дням;
      * i — процентная ставка базового периода, выраженная в десятичной форме.
      */
-    public static BigDecimal calculatePSK(BigDecimal totalAmount, BigDecimal monthlyPayment, Integer term, BigDecimal rate) {
-        log.debug("Calculating PSK with TotalAmount: {}, Rate: {}, MonthlyPayment: {}, Term: {}", totalAmount, rate, monthlyPayment, term);
+    public static BigDecimal calculatePSK(BigDecimal totalAmount, List<PaymentScheduleElementDto> paymentSchedule) {
+        int term = paymentSchedule.size();
+        log.debug("Calculating PSK with TotalAmount: {}, Payment count: {}", totalAmount, term);
 
         double[] cashFlows = new double[term + TOTAL_AMOUNT_AS_FIRST_PAYMENT];
         cashFlows[0] = totalAmount.multiply(BigDecimal.valueOf(-1)).doubleValue();
         IntStream.range(0, term)
-                .forEach(i -> cashFlows[i + TOTAL_AMOUNT_AS_FIRST_PAYMENT] = monthlyPayment.doubleValue());
+                .forEach(i -> cashFlows[i + TOTAL_AMOUNT_AS_FIRST_PAYMENT] = paymentSchedule.get(i).totalPayment().doubleValue());
 
         BigDecimal basePeriodInterestRate = BigDecimal.valueOf(irr(cashFlows));
         BigDecimal psk = basePeriodInterestRate.multiply(ONE_HUNDRED_PERCENT.multiply(TWELVE_MONTH)).setScale(3,RoundingMode.HALF_UP);

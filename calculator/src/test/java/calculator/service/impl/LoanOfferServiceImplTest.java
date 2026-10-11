@@ -1,19 +1,22 @@
 package calculator.service.impl;
 
-import calculator.service.util.ServiceForCalculate;
 import core.dto.LoanOfferDto;
 import core.dto.LoanStatementRequestDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest
@@ -29,9 +32,6 @@ class LoanOfferServiceImplTest {
     @Value("${loan.insurance-rate-discount}")
     private BigDecimal insuranceRateDiscount;
 
-    @Mock
-    private ServiceForCalculate serviceForCalculate;
-
     @Autowired
     private LoanOfferServiceImpl loanOfferService;
     private LoanStatementRequestDto request;
@@ -39,9 +39,12 @@ class LoanOfferServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-        request = LoanStatementRequestDto.builder()
-                .withAmount(BigDecimal.valueOf(20000))
+        request = createRequest(BigDecimal.valueOf(20000));
+    }
+
+    private LoanStatementRequestDto createRequest(BigDecimal amount) {
+        return LoanStatementRequestDto.builder()
+                .withAmount(amount)
                 .withTerm(12)
                 .withFirstName("Ivan")
                 .withLastName("Ivanov")
@@ -84,6 +87,40 @@ class LoanOfferServiceImplTest {
         assertEquals(4, offers.size());
         for (int i = 1; i < offers.size(); i++) {
             assertTrue(offers.get(i - 1).getRate().compareTo(offers.get(i).getRate()) >= 0);
+        }
+    }
+
+    @Test
+    void concurrentRequestsKeepTheirOwnInsurancePrice() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<List<LoanOfferDto>>> results = new ArrayList<>();
+
+        try {
+            for (int i = 0; i < 64; i++) {
+                BigDecimal amount = BigDecimal.valueOf(20000 + 100000L * i);
+                results.add(executor.submit(() -> {
+                    start.await();
+                    return loanOfferService.generateLoanOffers(createRequest(amount));
+                }));
+            }
+            start.countDown();
+
+            for (int i = 0; i < results.size(); i++) {
+                BigDecimal amount = BigDecimal.valueOf(20000 + 100000L * i);
+                BigDecimal insurance = amount.multiply(new BigDecimal("0.04")).min(new BigDecimal("100000"));
+                List<LoanOfferDto> requestOffers = results.get(i).get(10, TimeUnit.SECONDS);
+                assertEquals(4, requestOffers.size());
+
+                for (LoanOfferDto offer : requestOffers) {
+                    BigDecimal expectedTotal = amount.add(offer.getIsInsuranceEnabled() ? insurance : BigDecimal.ZERO);
+                    assertEquals(0, expectedTotal.compareTo(offer.getTotalAmount()),
+                            "An offer must use insurance calculated for its own request");
+                }
+            }
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
         }
     }
 }

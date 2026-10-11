@@ -33,7 +33,7 @@ public record PaymentScheduleElementDto (
     @DecimalMin(value = "0.01", message = "Debt payment must be greater than zero")
     BigDecimal debtPayment,
 
-    @Schema(description = "Remaining debt after this payment", example = "3000.00")
-    @DecimalMin(value = "0.01", message = "Remaining debt must be greater than zero")
+    @Schema(description = "Remaining total of future payments, including principal and interest", example = "3000.00")
+    @DecimalMin(value = "0.00", message = "Remaining debt cannot be negative")
     BigDecimal remainingDebt
 ) implements Serializable {}

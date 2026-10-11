@@ -28,8 +28,6 @@ public class LoanOfferServiceImpl implements LoanOfferService {
     @Value("${loan.insurance-rate-discount}")
     private BigDecimal insuranceRateDiscount;
 
-    private BigDecimal insurancePrice;
-
     @Override
     public List<LoanOfferDto> generateLoanOffers(LoanStatementRequestDto request) {
         log.info("Starting loan offers generation with request: {}", request);
@@ -38,7 +36,7 @@ public class LoanOfferServiceImpl implements LoanOfferService {
         Integer term = request.term();
 
         log.debug("Input values - Requested Amount: {}, Term: {}", requestedAmount, term);
-        insurancePrice = ServiceForCalculate.calculateInsurancePrice(requestedAmount);
+        BigDecimal insurancePrice = ServiceForCalculate.calculateInsurancePrice(requestedAmount);
         log.debug("Insurance price will be: {}", insurancePrice);
 
         List<LoanOfferDto> offers =

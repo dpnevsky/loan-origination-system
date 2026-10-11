@@ -9,12 +9,11 @@ import core.dto.ScoringDataDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import java.util.ArrayList;
 import java.util.List;
 import java.math.RoundingMode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import static calculator.service.util.Constant.INITIAL_INSURANCE_PRICE;
 import static calculator.service.util.Constant.ONE_HUNDRED_PERCENT;
 import static calculator.service.util.Constant.TWELVE_MONTH;
@@ -55,13 +54,15 @@ public class LoanCalculatorServiceImpl implements LoanCalculatorService {
         BigDecimal monthlyPayment = calculateMonthlyPayment(requestedAmount, rate, term);
         log.debug("Calculated monthly payment: {}", monthlyPayment);
 
-        BigDecimal psk = calculatePSK(requestedAmount, monthlyPayment, term, rate);
-        log.debug("Calculated PSK (Full Loan Cost): {}", psk);
-
-        List<PaymentScheduleElementDto> paymentSchedule = generatePaymentSchedule(rate, monthlyPayment, term);
+        List<PaymentScheduleElementDto> paymentSchedule = generatePaymentSchedule(requestedAmount, rate, monthlyPayment, term);
         log.debug("Generated payment schedule with {} elements", paymentSchedule.size());
 
-        BigDecimal totalPayment = monthlyPayment.multiply(BigDecimal.valueOf(term));
+        BigDecimal psk = calculatePSK(requestedAmount, paymentSchedule);
+        log.debug("Calculated PSK (Full Loan Cost): {}", psk);
+
+        BigDecimal totalPayment = paymentSchedule.stream()
+                .map(PaymentScheduleElementDto::totalPayment)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         CreditDto creditDto = CreditDto.builder()
                 .withAmount(totalPayment)
@@ -78,33 +79,44 @@ public class LoanCalculatorServiceImpl implements LoanCalculatorService {
         return creditDto;
     }
 
-    private List<PaymentScheduleElementDto> generatePaymentSchedule(BigDecimal rate, BigDecimal monthlyPayment, Integer term) {
-        log.debug("Generating payment schedule with Rate: {}, MonthlyPayment: {}, Term: {}", rate, monthlyPayment, term);
+    private List<PaymentScheduleElementDto> generatePaymentSchedule(BigDecimal principal, BigDecimal rate,
+                                                                    BigDecimal monthlyPayment, Integer term) {
+        log.debug("Generating payment schedule with Principal: {}, Rate: {}, MonthlyPayment: {}, Term: {}",
+                principal, rate, monthlyPayment, term);
 
-        final BigDecimal[] remainingDebt = {monthlyPayment.multiply(BigDecimal.valueOf(term))};
-        List<PaymentScheduleElementDto> paymentScheduleElementDtoList =
-                IntStream.rangeClosed(1, term)
-                        .mapToObj(i -> {
-                            BigDecimal interestPayment = remainingDebt[0]
-                                    .multiply(rate.divide(ONE_HUNDRED_PERCENT, 2, RoundingMode.HALF_UP))
-                                    .divide(TWELVE_MONTH, 2, RoundingMode.HALF_UP);
-                            BigDecimal debtPayment = monthlyPayment.subtract(interestPayment);
+        BigDecimal remainingPrincipal = principal;
+        LocalDate calculationDate = LocalDate.now();
+        List<PaymentScheduleElementDto> paymentScheduleElementDtoList = new ArrayList<>(term);
 
-                            remainingDebt[0] = remainingDebt[0].subtract(monthlyPayment);
+        for (int i = 1; i <= term; i++) {
+            BigDecimal interestPayment = remainingPrincipal.multiply(rate)
+                    .divide(ONE_HUNDRED_PERCENT.multiply(TWELVE_MONTH), 2, RoundingMode.HALF_UP);
+            // The final payment settles the principal left after rounding previous payments.
+            BigDecimal debtPayment = i == term ? remainingPrincipal : monthlyPayment.subtract(interestPayment);
+            BigDecimal totalPayment = debtPayment.add(interestPayment);
+            remainingPrincipal = remainingPrincipal.subtract(debtPayment);
 
-                            PaymentScheduleElementDto element = PaymentScheduleElementDto.builder()
-                                    .withNumber(i)
-                                    .withDate(LocalDate.now().plusMonths(i))
-                                    .withTotalPayment(monthlyPayment)
-                                    .withInterestPayment(interestPayment)
-                                    .withDebtPayment(debtPayment)
-                                    .withRemainingDebt(remainingDebt[0])
-                                    .build();
+            paymentScheduleElementDtoList.add(PaymentScheduleElementDto.builder()
+                    .withNumber(i)
+                    .withDate(calculationDate.plusMonths(i))
+                    .withTotalPayment(totalPayment)
+                    .withInterestPayment(interestPayment)
+                    .withDebtPayment(debtPayment)
+                    .withRemainingDebt(BigDecimal.ZERO)
+                    .build());
+        }
 
-                            log.debug("Generated payment schedule element: {}", element);
-                            return element;
-                        })
-                        .collect(Collectors.toList());
+        // remainingDebt is the total of future payments, including principal and interest.
+        BigDecimal remainingPayments = BigDecimal.ZERO;
+        for (int i = paymentScheduleElementDtoList.size() - 1; i >= 0; i--) {
+            PaymentScheduleElementDto element = paymentScheduleElementDtoList.get(i);
+            PaymentScheduleElementDto updatedElement = new PaymentScheduleElementDto(
+                    element.number(), element.date(), element.totalPayment(), element.interestPayment(),
+                    element.debtPayment(), remainingPayments);
+            paymentScheduleElementDtoList.set(i, updatedElement);
+            remainingPayments = remainingPayments.add(element.totalPayment());
+            log.debug("Generated payment schedule element: {}", updatedElement);
+        }
 
         log.debug("Completed payment schedule generation");
         return paymentScheduleElementDtoList;
