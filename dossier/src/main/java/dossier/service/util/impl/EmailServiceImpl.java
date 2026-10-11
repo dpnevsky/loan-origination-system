@@ -23,7 +23,7 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendEmail(String to, String subject, String body) throws MessagingException {
         log.info("Preparing to send email...");
-        log.debug("Email details - To: {}, Subject: {}, Body: {}", to, subject, body);
+        log.debug("Email details - To: {}, Subject: {}", to, subject);
 
         if (to == null || to.isBlank()) {
             log.error("Recipient email address is null or empty.");
@@ -51,7 +51,7 @@ public class EmailServiceImpl implements EmailService {
             mailSender.send(message);
             log.info("Email successfully sent to: {}", to);
         } catch (MessagingException e) {
-            log.error("Failed to send email to: {}, Error: {}", to, e.getMessage(), e);
+            log.error("Failed to send email to: {}, Error type: {}", to, e.getClass().getSimpleName());
             throw e;
         }
     }

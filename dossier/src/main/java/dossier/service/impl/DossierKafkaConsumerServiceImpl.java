@@ -27,7 +27,7 @@ public class DossierKafkaConsumerServiceImpl implements DossierKafkaConsumerServ
             log.debug("Preparing to send email to: {}, with theme: {}", message.address(), message.theme().name());
             emailService.sendEmail(message.address(), message.theme().name(), message.text());
         } catch (Exception e) {
-            log.error("Error while processing message: {}, Error: {}", message, e.getMessage(), e);
+            log.error("Error while processing message: {}, Error type: {}", message, e.getClass().getSimpleName());
         }
     }
 }

@@ -56,7 +56,6 @@ public class DocumentApiController {
     public void signDocument(@PathVariable(name = "statementId") UUID statementId) {
         log.info("Processing request to sign documents for statementId: {}", statementId);
         UUID sesCode = UUID.randomUUID();
-        log.debug("Generated SES code: {}", sesCode);
         loanStatementService.setSesCode(statementId, sesCode);
         log.debug("SES code set for statementId: {}", statementId);
         String email = clientService.getEmailByStatementId(statementId);
@@ -94,7 +93,7 @@ public class DocumentApiController {
             log.info("Sending credit issued email: {}", emailMessage);
             dealKafkaProducerClientService.sendDocuments(KafkaTopicNameType.CREDIT_ISSUED, emailMessage);
         } else {
-            log.warn("Invalid SES code provided for statementId: {}. Expected: {}, Received: {}", statementId, expectedSesCode, sesCode);
+            log.warn("Invalid SES code provided for statementId: {}", statementId);
         }
     }
 }

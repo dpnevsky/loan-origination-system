@@ -79,10 +79,10 @@ public class GatewayController {
                     .retrieve()
                     .body(String.class);
 
-            log.info("Response from {}: {}", serviceName, response);
+            log.info("Response received from {}", serviceName);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            log.error("Error while routing {} request to {}: {}", requestMethod, serviceName, e.getMessage(), e);
+            log.error("Error while routing {} request to {}. Error type: {}", requestMethod, serviceName, e.getClass().getSimpleName());
             throw new RuntimeException("Failed to route " + requestMethod + " request to " + serviceName, e);
         }
     }

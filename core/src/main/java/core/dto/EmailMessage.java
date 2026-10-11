@@ -29,8 +29,6 @@ public record EmailMessage(
 ) implements Serializable {
         @Override
         public String toString() {
-                return "EmailMessage{" +
-                        "Theme: " + theme +
-                        "\n" + text;
+                return "EmailMessage{theme=" + theme + ", statementId=" + statementId + '}';
         }
 }
